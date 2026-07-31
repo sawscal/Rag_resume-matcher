@@ -1323,7 +1323,7 @@
             matchGrid.innerHTML = `
                 <div class="saas-loader">
                     <div class="pulse-ring"></div>
-                    <p style="color: var(--text-muted); font-size: 0.9rem;">Comparing Gemini embeddings...</p>
+                    <p style="color: var(--text-muted); font-size: 0.9rem;">Analyzing candidate profiles with TF-IDF + NLP...</p>
                 </div>
             `;
 
@@ -1446,8 +1446,8 @@
             ragModalBody.innerHTML = `
                 <div class="saas-loader" style="padding: 4rem 0;">
                     <div class="pulse-ring"></div>
-                    <p style="color: var(--text-muted); font-size: 0.95rem; font-weight: 500;">Retrieving Candidate context &amp; generating evaluation...</p>
-                    <p style="color: var(--text-muted); font-size: 0.8rem; font-style: italic;">Powered by Gemini AI...</p>
+                    <p style="color: var(--text-muted); font-size: 0.95rem; font-weight: 500;">Running NLP analysis &amp; computing fit score...</p>
+                    <p style="color: var(--text-muted); font-size: 0.8rem; font-style: italic;">Extracting skills, detecting gaps, scoring experience...</p>
                 </div>
             `;
             ragModal.classList.add('active');
@@ -1524,7 +1524,7 @@
 
                 ragModalBody.innerHTML = `
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1.5rem;">
-                        <span style="font-size: 0.9rem; color: var(--text-muted);">Gemini AI Score Analysis:</span>
+                        <span style="font-size: 0.9rem; color: var(--text-muted);">NLP Fit Score Analysis:</span>
                         <span class="panel-count" style="color: var(--accent-success); font-weight:700;">${matchScore}% Match Index</span>
                     </div>
                     <div class="rag-report-box">${parsedHtml}</div>

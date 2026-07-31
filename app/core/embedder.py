@@ -1,50 +1,66 @@
+"""
+Local Text Embedder — No external API required.
+
+Uses scikit-learn's HashingVectorizer to produce fixed-size, consistent
+text embeddings that support cosine similarity comparisons.
+
+HashingVectorizer advantages:
+  - No fitting step needed (vocabulary is hashed, not learned)
+  - Deterministic: same text always gives same vector
+  - Fast, lightweight, zero network calls
+  - Works offline and on Vercel serverless
+"""
+
 import numpy as np
-import os
 from typing import List, Union
-from google import genai
+from sklearn.feature_extraction.text import HashingVectorizer
+
 
 class ResumeEmbedder:
-    def __init__(self, model_name: str = "text-embedding-004"):
-        """
-        Initializes the sentence embedder with Gemini API.
-        """
-        self.model_name = model_name
-        self._client = None
+    """
+    Converts resume and job description text into fixed-dimensional
+    normalized vectors using TF-style hashing. Cosine similarity between
+    two such vectors measures semantic overlap.
+    """
 
-    @property
-    def client(self):
-        if self._client is None:
-            # Requires GEMINI_API_KEY environment variable to be set
-            self._client = genai.Client()
-        return self._client
+    def __init__(self, n_features: int = 2 ** 14):
+        """
+        Args:
+            n_features: Size of the hashed feature space (default 16 384).
+                        Larger values reduce hash collisions.
+        """
+        self.n_features = n_features
+        self._vectorizer = HashingVectorizer(
+            n_features=n_features,
+            norm="l2",            # already unit-length → cosine sim = dot product
+            alternate_sign=False, # keep all positive for cleaner similarity
+            stop_words="english",
+            ngram_range=(1, 2),   # unigrams + bigrams capture phrases like "machine learning"
+            analyzer="word",
+            lowercase=True,
+        )
 
     def embed_text(self, text: Union[str, List[str]]) -> np.ndarray:
         """
-        Generates embedding vector(s) for the input text(s).
-        Returns a numpy array of shape (embedding_dim,) or (num_texts, embedding_dim).
+        Generates an L2-normalized embedding vector for the input text.
+
+        Args:
+            text: A single string or a list of strings.
+        Returns:
+            np.ndarray of shape (n_features,) for a single string,
+            or (n_texts, n_features) for a list.
         """
         if isinstance(text, str):
-            # Encode a single string
-            response = self.client.models.embed_content(
-                model=self.model_name,
-                contents=text
-            )
-            return np.array(response.embeddings[0].values, dtype=np.float32)
+            mat = self._vectorizer.transform([text])
+            return np.asarray(mat.todense(), dtype=np.float32).squeeze(0)
         else:
-            # Encode a list of strings
-            response = self.client.models.embed_content(
-                model=self.model_name,
-                contents=text
-            )
-            embeddings = [emb.values for emb in response.embeddings]
-            return np.array(embeddings, dtype=np.float32)
+            mat = self._vectorizer.transform(text)
+            return np.asarray(mat.todense(), dtype=np.float32)
 
     @property
     def embedding_dim(self) -> int:
-        """
-        Returns the dimensionality of the generated embeddings.
-        """
-        return 768
+        return self.n_features
 
-# Instantiate a global embedder for use across the application
+
+# Global singleton — zero initialization cost, no network calls
 embedder = ResumeEmbedder()
