@@ -16,7 +16,9 @@ from app.models import (
     RAGAnalysisRequest,
     RAGAnalysisResponse,
     ResumeResponse,
-    UploadResponse
+    UploadResponse,
+    StatelessMatchRequest,
+    StatelessAnalyzeRequest,
 )
 from app.core.parser import extract_text_from_bytes
 from app.core.embedder import embedder
@@ -157,7 +159,8 @@ async def upload_resume(file: UploadFile = File(...)):
                 message=f"Resume '{filename}' successfully parsed and indexed in FAISS.",
                 resume_id=resume_id,
                 filename=filename,
-                snippet=snippet
+                snippet=snippet,
+                resume_text=text  # Return full text for client-side caching (stateless mode)
             )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
@@ -311,3 +314,78 @@ async def clear_resumes():
     """
     vector_store.clear()
     return {"message": "All resumes cleared from vector store."}
+
+
+@app.post("/stateless-match", response_model=MatchResponse)
+async def stateless_match(request: StatelessMatchRequest):
+    """
+    Stateless match endpoint: accepts full resume texts inline in the request.
+    No server-side storage needed. Works perfectly on serverless platforms like Vercel.
+    """
+    import time
+    start_time = time.perf_counter()
+    try:
+        if not request.candidates:
+            return MatchResponse(matches=[], method="Gemini Embeddings (Stateless)", processing_time_ms=0.0)
+
+        # Embed the job description
+        query_emb = embedder.embed_text(request.job_description)
+        query_norm = query_emb / (np.linalg.norm(query_emb) + 1e-9)
+
+        # Score each candidate inline
+        scored = []
+        for candidate in request.candidates:
+            c_emb = embedder.embed_text(candidate.text)
+            c_norm = c_emb / (np.linalg.norm(c_emb) + 1e-9)
+            score = float(np.dot(query_norm, c_norm))
+            scored.append((candidate, score))
+
+        scored.sort(key=lambda x: x[1], reverse=True)
+        top = scored[:request.top_k]
+
+        matches = []
+        for candidate, score in top:
+            snippet = candidate.text[:200] + "..." if len(candidate.text) > 200 else candidate.text
+            matches.append(MatchResult(
+                resume_id=candidate.resume_id,
+                filename=candidate.filename,
+                score=score,
+                snippet=snippet
+            ))
+
+        processing_time = (time.perf_counter() - start_time) * 1000.0
+        return MatchResponse(matches=matches, method="Gemini Embeddings (Stateless)", processing_time_ms=processing_time)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Stateless match failed: {str(e)}")
+
+
+@app.post("/stateless-analyze")
+async def stateless_analyze(request: StatelessAnalyzeRequest):
+    """
+    Stateless RAG analysis: accepts full resume text inline — no stored state required.
+    Works on Vercel serverless functions without any persistent filesystem.
+    """
+    import time
+    start_time = time.perf_counter()
+    try:
+        # Compute similarity
+        resume_emb = embedder.embed_text(request.resume_text)
+        query_emb = embedder.embed_text(request.job_description)
+        r_norm = resume_emb / (np.linalg.norm(resume_emb) + 1e-9)
+        q_norm = query_emb / (np.linalg.norm(query_emb) + 1e-9)
+        score = float(np.dot(r_norm, q_norm))
+
+        # Generate analysis via Gemini
+        analysis = rag_generator.generate_match_analysis(
+            resume_text=request.resume_text,
+            job_description=request.job_description
+        )
+        processing_time = (time.perf_counter() - start_time) * 1000.0
+        return {
+            "resume_id": request.resume_id,
+            "score": score,
+            "analysis": analysis,
+            "processing_time_ms": processing_time
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Stateless analysis failed: {str(e)}")

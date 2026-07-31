@@ -929,6 +929,10 @@
     <script>
         const API_URL = ""; 
 
+        // Client-side candidate store — holds full resume text in browser memory
+        // This makes the app fully stateless on Vercel (no server-side persistence needed)
+        let candidateStore = {}; // { resume_id: { resume_id, filename, text } }
+
         // DOM elements cache
         const fileInput = document.getElementById('fileInput');
         const uploadZone = document.getElementById('uploadZone');
@@ -955,6 +959,7 @@
         const ragModalBody = document.getElementById('ragModalBody');
 
         let selectedFile = null;
+        let bulkCandidates = []; // Holds parsed bulk candidates from spreadsheet uploads
 
         // Custom Toast function
         function showToast(message, type = 'success') {
@@ -1033,6 +1038,8 @@
             try {
                 const res = await fetch(`${API_URL}/resumes`, { method: 'DELETE' });
                 await res.json();
+                candidateStore = {}; // Clear client-side cache too
+                bulkCandidates = [];
                 showToast("Embeddings database cleared successfully", "warning");
                 fetchResumes();
             } catch (err) {
@@ -1101,13 +1108,22 @@
                 selectedFile = null;
                 fileCard.style.display = 'none';
                 fileInput.value = '';
-                await fetchResumes();
                 
                 if (result.is_bulk) {
+                    // For bulk uploads, we get no full text; TF-IDF fallback will handle it
                     showToast(`Bulk upload success! Indexed ${result.count} candidates from sheet.`, "success");
                 } else {
-                    showToast(`Candidate resume processed and indexed in FAISS!`, "success");
+                    // Cache the full resume text in browser memory for stateless matching
+                    if (result.resume_id && result.resume_text) {
+                        candidateStore[result.resume_id] = {
+                            resume_id: result.resume_id,
+                            filename: result.filename,
+                            text: result.resume_text
+                        };
+                    }
+                    showToast(`Candidate resume processed and indexed!`, "success");
                 }
+                await fetchResumes();
             } catch (err) {
                 showToast(`Upload failed: ${err.message}`, "danger");
                 fileCard.style.borderColor = 'rgba(239, 68, 68, 0.2)';
@@ -1129,11 +1145,16 @@
             uploadFile();
         });
 
-        // Similarity match event
         async function runMatch(endpoint, methodTitle) {
             const queryText = jdText.value.trim();
             if (!queryText) {
                 showToast("Please enter or paste job description requirements first.", "warning");
+                return;
+            }
+
+            const candidates = Object.values(candidateStore);
+            if (candidates.length === 0) {
+                showToast("Please upload at least one resume first.", "warning");
                 return;
             }
 
@@ -1143,16 +1164,18 @@
             matchGrid.innerHTML = `
                 <div class="saas-loader">
                     <div class="pulse-ring"></div>
-                    <p style="color: var(--text-muted); font-size: 0.9rem;">Comparing Sentence-BERT embeddings in FAISS index...</p>
+                    <p style="color: var(--text-muted); font-size: 0.9rem;">Comparing Gemini embeddings...</p>
                 </div>
             `;
 
             try {
-                const res = await fetch(`${API_URL}/${endpoint}`, {
+                // Use stateless endpoint — sends full resume text in request body
+                const res = await fetch(`${API_URL}/stateless-match`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         job_description: queryText,
+                        candidates: candidates,
                         top_k: k
                     })
                 });
@@ -1186,7 +1209,7 @@
                     const card = document.createElement('div');
                     card.className = 'match-card';
                     card.style.animation = `fadeInUp 0.4s ease forwards ${index * 0.1}s`;
-                    card.style.opacity = 0; // Trigger by animation delay
+                    card.style.opacity = 0;
                     
                     card.innerHTML = `
                         <div class="match-card-header">
@@ -1216,8 +1239,8 @@
             }
         }
 
-        matchBtn.addEventListener('click', () => runMatch('match', 'Sentence-BERT + FAISS'));
-        tfidfBtn.addEventListener('click', () => runMatch('match-tfidf', 'TF-IDF Baseline'));
+        matchBtn.addEventListener('click', () => runMatch('stateless-match', 'Gemini Embeddings (Stateless)'));
+        tfidfBtn.addEventListener('click', () => runMatch('stateless-match', 'Gemini Embeddings (Stateless)'));
 
         // HTML escaping utility for safe string inline execution
         function escapeHtml(string) {
@@ -1229,26 +1252,34 @@
                 .replace(/'/g, "&#039;");
         }
 
-        // RAG Fit report query
+        // RAG Fit report query — stateless: sends full resume text inline
         window.triggerRag = async function(resumeId, matchScore, filename) {
             const queryText = jdText.value.trim();
+            const candidate = candidateStore[resumeId];
+            if (!candidate) {
+                showToast("Resume text not available. Please re-upload the resume.", "danger");
+                return;
+            }
+
             document.getElementById('ragModalTitle').innerHTML = `AI Evaluation: <span style="color: var(--accent-primary)">${filename}</span>`;
             
             ragModalBody.innerHTML = `
                 <div class="saas-loader" style="padding: 4rem 0;">
                     <div class="pulse-ring"></div>
-                    <p style="color: var(--text-muted); font-size: 0.95rem; font-weight: 500;">Retrieving Candidate context & generating evaluation...</p>
-                    <p style="color: var(--text-muted); font-size: 0.8rem; font-style: italic;">Running local Flan-T5 model on CPU (takes ~2 seconds)...</p>
+                    <p style="color: var(--text-muted); font-size: 0.95rem; font-weight: 500;">Retrieving Candidate context &amp; generating evaluation...</p>
+                    <p style="color: var(--text-muted); font-size: 0.8rem; font-style: italic;">Powered by Gemini AI...</p>
                 </div>
             `;
             ragModal.classList.add('active');
 
             try {
-                const res = await fetch(`${API_URL}/rag-analyze`, {
+                const res = await fetch(`${API_URL}/stateless-analyze`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         resume_id: resumeId,
+                        filename: filename,
+                        resume_text: candidate.text,
                         job_description: queryText
                     })
                 });
@@ -1260,18 +1291,15 @@
 
                 const data = await res.json();
                 
-                // Parse and beautify the text structure from Flan-T5 model
                 const rawAnalysis = data.analysis;
                 let parsedHtml = '';
 
-                // Attempt structural rendering of evaluation nodes
                 if (rawAnalysis.toLowerCase().includes("error")) {
                     parsedHtml = `<div style="color: var(--accent-danger); font-weight: 500;">${rawAnalysis}</div>`;
                 } else {
-                    // Prettify T5 segments by parsing 1), 2), 3) lists or similar
-                    const matchesMatch = rawAnalysis.match(/1\)(.*?)(?=2\)|$)/i);
-                    const gapsMatch = rawAnalysis.match(/2\)(.*?)(?=3\)|$)/i);
-                    const recommendationMatch = rawAnalysis.match(/3\)(.*?)$/i);
+                    const matchesMatch = rawAnalysis.match(/1\)(.*?)(?=2\)|$)/is);
+                    const gapsMatch = rawAnalysis.match(/2\)(.*?)(?=3\)|$)/is);
+                    const recommendationMatch = rawAnalysis.match(/3\)(.*?)$/is);
 
                     if (matchesMatch || gapsMatch || recommendationMatch) {
                         if (matchesMatch) {
@@ -1279,7 +1307,7 @@
                                 <div class="rag-section-node">
                                     <div class="rag-node-title" style="color: var(--accent-success);">
                                         <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-                                        Matching Skills & Strength
+                                        Matching Skills &amp; Strengths
                                     </div>
                                     <div class="rag-node-body">${matchesMatch[1].trim()}</div>
                                 </div>
@@ -1290,7 +1318,7 @@
                                 <div class="rag-section-node">
                                     <div class="rag-node-title" style="color: var(--accent-warning);">
                                         <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                                        Identify Gap Areas
+                                        Skill Gaps
                                     </div>
                                     <div class="rag-node-body">${gapsMatch[1].trim()}</div>
                                 </div>
@@ -1308,14 +1336,15 @@
                             `;
                         }
                     } else {
-                        // Fallback simple view
-                        parsedHtml = `<div class="rag-section-node"><div class="rag-node-body">${rawAnalysis}</div></div>`;
+                        // Gemini gives rich markdown — render it nicely as plain text paragraphs
+                        const lines = rawAnalysis.split('\n').filter(l => l.trim());
+                        parsedHtml = lines.map(line => `<div class="rag-section-node"><div class="rag-node-body">${line}</div></div>`).join('');
                     }
                 }
 
                 ragModalBody.innerHTML = `
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1.5rem;">
-                        <span style="font-size: 0.9rem; color: var(--text-muted);">Generative LLM Score Analysis:</span>
+                        <span style="font-size: 0.9rem; color: var(--text-muted);">Gemini AI Score Analysis:</span>
                         <span class="panel-count" style="color: var(--accent-success); font-weight:700;">${matchScore}% Match Index</span>
                     </div>
                     <div class="rag-report-box">${parsedHtml}</div>
