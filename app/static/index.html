@@ -807,6 +807,129 @@
             from { opacity: 0; transform: translateY(15px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
+        /* ---- NLP Parsed Profile Section ---- */
+        .parsed-profile {
+            margin-top: 0.75rem;
+            padding: 0.75rem 1rem;
+            background: rgba(99, 102, 241, 0.06);
+            border: 1px solid rgba(99, 102, 241, 0.12);
+            border-radius: 10px;
+        }
+        .parsed-profile-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.6rem;
+        }
+        .skill-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            margin-bottom: 0.5rem;
+        }
+        .skill-chip {
+            background: rgba(99, 102, 241, 0.15);
+            color: #a5b4fc;
+            border: 1px solid rgba(99, 102, 241, 0.25);
+            border-radius: 20px;
+            padding: 0.2rem 0.65rem;
+            font-size: 0.72rem;
+            font-weight: 600;
+            white-space: nowrap;
+            transition: background 0.2s;
+        }
+        .skill-chip:hover { background: rgba(99, 102, 241, 0.3); }
+        .exp-edu-row {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            margin-top: 0.35rem;
+        }
+        .exp-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            background: rgba(16, 185, 129, 0.12);
+            color: #6ee7b7;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            border-radius: 20px;
+            padding: 0.2rem 0.65rem;
+            font-size: 0.72rem;
+            font-weight: 700;
+        }
+        .edu-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            background: rgba(245, 158, 11, 0.12);
+            color: #fcd34d;
+            border: 1px solid rgba(245, 158, 11, 0.2);
+            border-radius: 20px;
+            padding: 0.2rem 0.65rem;
+            font-size: 0.72rem;
+            font-weight: 700;
+        }
+
+        /* ---- TF-IDF score on match cards ---- */
+        .dual-score-row {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 0.5rem;
+        }
+        .score-label-pair {
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+        }
+        .score-label {
+            font-size: 0.65rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .score-val { font-size: 1rem; font-weight: 800; }
+
+        /* ---- Skill filter row ---- */
+        .filter-row {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            margin-top: 1rem;
+            padding: 0.75rem 1rem;
+            background: rgba(17, 24, 39, 0.6);
+            border: 1px solid var(--border-glow);
+            border-radius: 10px;
+        }
+        .filter-row input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text-main);
+            font-size: 0.9rem;
+            font-family: inherit;
+        }
+        .filter-row input::placeholder { color: var(--text-muted); }
+        .filter-clear-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 0;
+            transition: color 0.2s;
+        }
+        .filter-clear-btn:hover { color: var(--accent-danger); }
     </style>
 </head>
 <body>
@@ -898,6 +1021,13 @@
                         Traditional Keyword Match
                     </button>
                 </div>
+
+                <!-- Skill filter row -->
+                <div class="filter-row">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                    <input type="text" id="skillFilter" placeholder="Filter results by skill (e.g. Python, React, MySQL...)">
+                    <button class="filter-clear-btn" id="clearFilterBtn">Clear</button>
+                </div>
             </div>
         </div>
 
@@ -929,9 +1059,9 @@
     <script>
         const API_URL = ""; 
 
-        // Client-side candidate store — holds full resume text in browser memory
-        // This makes the app fully stateless on Vercel (no server-side persistence needed)
-        let candidateStore = {}; // { resume_id: { resume_id, filename, text } }
+        // Client-side candidate store — holds full resume text + parsed metadata in browser memory
+        let candidateStore = {}; // { resume_id: { resume_id, filename, text, parsed_metadata } }
+        let allMatchResults = []; // Cache last match results for skill filtering
 
         // DOM elements cache
         const fileInput = document.getElementById('fileInput');
@@ -948,6 +1078,8 @@
         const topK = document.getElementById('topK');
         const matchBtn = document.getElementById('matchBtn');
         const tfidfBtn = document.getElementById('tfidfBtn');
+        const skillFilter = document.getElementById('skillFilter');
+        const clearFilterBtn = document.getElementById('clearFilterBtn');
         
         const resultsSection = document.getElementById('resultsSection');
         const resultMethod = document.getElementById('resultMethod');
@@ -959,7 +1091,7 @@
         const ragModalBody = document.getElementById('ragModalBody');
 
         let selectedFile = null;
-        let bulkCandidates = []; // Holds parsed bulk candidates from spreadsheet uploads
+        let bulkCandidates = [];
 
         // Custom Toast function
         function showToast(message, type = 'success') {
@@ -999,38 +1131,61 @@
             return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
         }
 
-        // Fetch stored candidates
-        async function fetchResumes() {
-            try {
-                const res = await fetch(`${API_URL}/resumes`);
-                const data = await res.json();
-                resumeCount.innerText = data.length;
-                resumeList.innerHTML = '';
-                
-                if (data.length === 0) {
-                    resumeList.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; padding: 1.5rem; text-align: center;">No candidates indexed. Upload a file above.</div>';
-                    return;
-                }
+        // Helper: render parsed profile section HTML
+        function renderParsedProfile(meta) {
+            if (!meta) return '';
+            const skills = (meta.skills || []).slice(0, 10); // Show max 10 chips
+            const chips = skills.map(s => `<span class="skill-chip">${s}</span>`).join('');
+            const expBadge = meta.experience_years > 0
+                ? `<span class="exp-badge">⏱ ${meta.experience_years} yrs exp</span>` : '';
+            const eduBadge = meta.education
+                ? `<span class="edu-badge">🎓 ${meta.education}</span>` : '';
+            return `
+                <div class="parsed-profile">
+                    <div class="parsed-profile-header">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        NLP Parsed Profile
+                    </div>
+                    <div class="skill-chips">${chips || '<span style="color:var(--text-muted);font-size:0.75rem;">No skills detected</span>'}</div>
+                    <div class="exp-edu-row">${expBadge}${eduBadge}</div>
+                </div>
+            `;
+        }
 
-                data.forEach(resume => {
-                    const item = document.createElement('div');
-                    item.className = 'resume-ui-item';
-                    item.innerHTML = `
+        // Fetch stored candidates (reflects server-side FAISS index)
+        // Augments with client-side parsed metadata
+        function fetchResumes() {
+            resumeCount.innerText = Object.keys(candidateStore).length;
+            resumeList.innerHTML = '';
+
+            const candidates = Object.values(candidateStore);
+            if (candidates.length === 0) {
+                resumeList.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; padding: 1.5rem; text-align: center;">No candidates indexed. Upload a file above.</div>';
+                return;
+            }
+
+            candidates.forEach(candidate => {
+                const item = document.createElement('div');
+                item.className = 'resume-ui-item';
+                item.style.flexDirection = 'column';
+                item.style.alignItems = 'stretch';
+                item.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
                         <div class="resume-ui-icon">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                             <div style="overflow: hidden;">
-                                <div class="resume-ui-name" title="${resume.filename}">${resume.filename}</div>
-                                <div class="resume-ui-id">ID: ${resume.resume_id}</div>
+                                <div class="resume-ui-name" title="${candidate.filename}">${candidate.filename}</div>
+                                <div class="resume-ui-id">ID: ${candidate.resume_id}</div>
                             </div>
                         </div>
-                        <span style="color: var(--accent-success); font-size: 0.75rem; font-weight: 700; text-transform: uppercase;">Indexed</span>
-                    `;
-                    resumeList.appendChild(item);
-                });
-            } catch (err) {
-                console.error("Failed fetching resumes:", err);
-            }
+                        <span style="color: var(--accent-success); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; flex-shrink:0;">Indexed</span>
+                    </div>
+                    ${renderParsedProfile(candidate.parsed_metadata)}
+                `;
+                resumeList.appendChild(item);
+            });
         }
+
 
         // Clear indexed db
         clearBtn.addEventListener('click', async () => {
@@ -1110,20 +1265,24 @@
                 fileInput.value = '';
                 
                 if (result.is_bulk) {
-                    // For bulk uploads, we get no full text; TF-IDF fallback will handle it
                     showToast(`Bulk upload success! Indexed ${result.count} candidates from sheet.`, "success");
                 } else {
-                    // Cache the full resume text in browser memory for stateless matching
+                    // Cache full text + NLP-parsed metadata in browser memory
                     if (result.resume_id && result.resume_text) {
                         candidateStore[result.resume_id] = {
                             resume_id: result.resume_id,
                             filename: result.filename,
-                            text: result.resume_text
+                            text: result.resume_text,
+                            parsed_metadata: result.parsed_metadata || null
                         };
+                        const skillCount = result.parsed_metadata?.skills?.length || 0;
+                        const exp = result.parsed_metadata?.experience_years || 0;
+                        showToast(`Indexed! Found ${skillCount} skills${exp > 0 ? ', ' + exp + ' yrs exp' : ''}`, "success");
+                    } else {
+                        showToast(`Candidate resume processed and indexed!`, "success");
                     }
-                    showToast(`Candidate resume processed and indexed!`, "success");
                 }
-                await fetchResumes();
+                fetchResumes();
             } catch (err) {
                 showToast(`Upload failed: ${err.message}`, "danger");
                 fileCard.style.borderColor = 'rgba(239, 68, 68, 0.2)';
@@ -1189,54 +1348,75 @@
                 resultMethod.innerText = data.method;
                 resultSpeed.innerText = `${data.processing_time_ms.toFixed(2)} ms`;
                 
-                matchGrid.innerHTML = '';
-                if (data.matches.length === 0) {
-                    matchGrid.innerHTML = '<div style="color: var(--text-muted); padding: 3rem 0; text-align: center; font-size: 0.95rem;">No matching candidate found. Index some resumes first.</div>';
-                    return;
-                }
-
-                data.matches.forEach((match, index) => {
-                    const percentage = Math.max(0, Math.min(100, Math.round(match.score * 100)));
-                    
-                    // Choose color coding for visual metric
-                    let scoreColor = 'var(--accent-primary)';
-                    if (percentage >= 70) {
-                        scoreColor = 'var(--accent-success)';
-                    } else if (percentage >= 50) {
-                        scoreColor = 'var(--accent-warning)';
-                    }
-
-                    const card = document.createElement('div');
-                    card.className = 'match-card';
-                    card.style.animation = `fadeInUp 0.4s ease forwards ${index * 0.1}s`;
-                    card.style.opacity = 0;
-                    
-                    card.innerHTML = `
-                        <div class="match-card-header">
-                            <div class="match-card-title">
-                                <span class="match-card-filename">${match.filename}</span>
-                                <span class="match-card-id">ID: ${match.resume_id}</span>
-                            </div>
-                            <div class="score-percentage" style="color: ${scoreColor}">${percentage}% Fit</div>
-                        </div>
-                        <div class="score-track-box">
-                            <div class="progress-bar-wrapper">
-                                <div class="progress-bar-fill" style="width: ${percentage}%; background: ${scoreColor}"></div>
-                            </div>
-                        </div>
-                        <div class="match-snippet-box">${match.snippet}</div>
-                        <div class="match-card-actions">
-                            <button class="evaluate-fit-btn" onclick="triggerRag('${match.resume_id}', ${percentage}, '${escapeHtml(match.filename)}')">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-                                RAG AI Analysis
-                            </button>
-                        </div>
-                    `;
-                    matchGrid.appendChild(card);
-                });
+                allMatchResults = data.matches;
+                renderMatchCards(allMatchResults);
             } catch (err) {
                 matchGrid.innerHTML = `<div style="color: var(--accent-danger); padding: 3rem 0; text-align: center;">Error performing match: ${err.message}</div>`;
             }
+        }
+
+        function renderMatchCards(matches) {
+            matchGrid.innerHTML = '';
+            const filterVal = (skillFilter.value || '').toLowerCase().trim();
+            const filtered = filterVal
+                ? matches.filter(m => (m.parsed_metadata?.skills || []).some(s => s.toLowerCase().includes(filterVal)))
+                : matches;
+
+            if (filtered.length === 0) {
+                matchGrid.innerHTML = `<div style="color: var(--text-muted); padding: 3rem 0; text-align: center; font-size: 0.95rem;">${filterVal ? 'No candidates match the skill filter "' + filterVal + '".' : 'No matching candidate found. Index some resumes first.'}</div>`;
+                return;
+            }
+
+            filtered.forEach((match, index) => {
+                const percentage = Math.max(0, Math.min(100, Math.round(match.score * 100)));
+                const tfidfPct = Math.max(0, Math.min(100, Math.round((match.tfidf_score || 0) * 100)));
+
+                let scoreColor = 'var(--accent-primary)';
+                if (percentage >= 70) scoreColor = 'var(--accent-success)';
+                else if (percentage >= 50) scoreColor = 'var(--accent-warning)';
+
+                const card = document.createElement('div');
+                card.className = 'match-card';
+                card.style.animation = `fadeInUp 0.4s ease forwards ${index * 0.1}s`;
+                card.style.opacity = 0;
+
+                const skillsHtml = (match.parsed_metadata?.skills || []).slice(0, 8)
+                    .map(s => `<span class="skill-chip">${s}</span>`).join('');
+
+                card.innerHTML = `
+                    <div class="match-card-header">
+                        <div class="match-card-title">
+                            <span class="match-card-filename">${match.filename}</span>
+                            <span class="match-card-id">ID: ${match.resume_id}</span>
+                        </div>
+                    </div>
+                    <div class="dual-score-row">
+                        <div class="score-label-pair">
+                            <span class="score-label">Semantic Fit</span>
+                            <span class="score-val" style="color: ${scoreColor}">${percentage}%</span>
+                        </div>
+                        <div class="score-label-pair">
+                            <span class="score-label">TF-IDF Score</span>
+                            <span class="score-val" style="color: var(--accent-secondary)">${tfidfPct}%</span>
+                        </div>
+                        ${match.parsed_metadata?.experience_years > 0 ? `<div class="score-label-pair"><span class="score-label">Experience</span><span class="score-val" style="color: #6ee7b7; font-size:0.9rem;">${match.parsed_metadata.experience_years} yrs</span></div>` : ''}
+                    </div>
+                    <div class="score-track-box">
+                        <div class="progress-bar-wrapper">
+                            <div class="progress-bar-fill" style="width: ${percentage}%; background: ${scoreColor}"></div>
+                        </div>
+                    </div>
+                    ${skillsHtml ? `<div class="skill-chips" style="margin: 0.5rem 0;">${skillsHtml}</div>` : ''}
+                    <div class="match-snippet-box">${match.snippet}</div>
+                    <div class="match-card-actions">
+                        <button class="evaluate-fit-btn" onclick="triggerRag('${match.resume_id}', ${percentage}, '${escapeHtml(match.filename)}')">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                            RAG AI Analysis
+                        </button>
+                    </div>
+                `;
+                matchGrid.appendChild(card);
+            });
         }
 
         matchBtn.addEventListener('click', () => runMatch('stateless-match', 'Gemini Embeddings (Stateless)'));
@@ -1365,7 +1545,16 @@
             }
         });
 
-        // Initialize fetch
+        // Skill filter — re-renders match cards in real time
+        skillFilter.addEventListener('input', () => {
+            if (allMatchResults.length > 0) renderMatchCards(allMatchResults);
+        });
+        clearFilterBtn.addEventListener('click', () => {
+            skillFilter.value = '';
+            if (allMatchResults.length > 0) renderMatchCards(allMatchResults);
+        });
+
+        // Initialize candidate list from client-side store
         fetchResumes();
     </script>
 </body>

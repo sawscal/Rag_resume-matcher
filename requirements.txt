@@ -9,3 +9,4 @@ numpy
 pandas
 python-docx
 openpyxl
+mysql-connector-python

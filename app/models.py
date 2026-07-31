@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 class MatchRequest(BaseModel):
     job_description: str = Field(..., description="The job description text to match resumes against.")
@@ -22,11 +22,31 @@ class StatelessAnalyzeRequest(BaseModel):
     filename: str = Field(..., description="Resume filename.")
     resume_text: str = Field(..., description="Full text of the resume.")
 
+# ---------------------------------------------------------------------------
+# NLP parsed metadata
+# ---------------------------------------------------------------------------
+class ParsedMetadata(BaseModel):
+    skills: List[str] = Field(default_factory=list, description="Extracted skill set from resume.")
+    experience_years: float = Field(0.0, description="Total years of professional experience detected.")
+    education: Optional[str] = Field(None, description="Highest education level detected.")
+
+# ---------------------------------------------------------------------------
+# MySQL candidate filter
+# ---------------------------------------------------------------------------
+class CandidateFilterRequest(BaseModel):
+    skill: Optional[str] = Field(None, description="Filter candidates by skill keyword.")
+    min_experience_years: Optional[float] = Field(None, description="Minimum years of experience.")
+
+# ---------------------------------------------------------------------------
+# Match models
+# ---------------------------------------------------------------------------
 class MatchResult(BaseModel):
     resume_id: str = Field(..., description="The unique ID of the resume.")
     filename: str = Field(..., description="The original filename of the resume.")
-    score: float = Field(..., description="Similarity score (Cosine Similarity).")
+    score: float = Field(..., description="Semantic similarity score (Cosine Similarity).")
+    tfidf_score: Optional[float] = Field(None, description="TF-IDF cosine similarity score.")
     snippet: str = Field(..., description="Snippet of the resume text.")
+    parsed_metadata: Optional[ParsedMetadata] = Field(None, description="NLP-extracted profile data.")
 
 class MatchResponse(BaseModel):
     matches: List[MatchResult] = Field(..., description="List of matched resumes sorted by relevance.")
@@ -58,3 +78,4 @@ class UploadResponse(BaseModel):
     filename: Optional[str] = Field(None, description="The filename of the indexed resume (single upload).")
     snippet: Optional[str] = Field(None, description="The text snippet of the indexed resume (single upload).")
     resume_text: Optional[str] = Field(None, description="Full extracted text of the resume (returned for client-side caching).")
+    parsed_metadata: Optional[ParsedMetadata] = Field(None, description="NLP-extracted skills, experience, and education.")

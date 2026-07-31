@@ -19,12 +19,16 @@ from app.models import (
     UploadResponse,
     StatelessMatchRequest,
     StatelessAnalyzeRequest,
+    ParsedMetadata,
+    CandidateFilterRequest,
 )
 from app.core.parser import extract_text_from_bytes
 from app.core.embedder import embedder
 from app.core.vector_store import ResumeVectorStore
 from app.core.tfidf_baseline import TFIDFBaselineMatcher
 from app.core.rag_generator import rag_generator
+from app.core.nlp_parser import parse_resume
+from app.core.database import candidate_db
 
 app = FastAPI(
     title="RAG-Based AI Resume & Job Matcher API",
@@ -152,15 +156,38 @@ async def upload_resume(file: UploadFile = File(...)):
             )
             
             snippet = text[:200] + "..." if len(text) > 200 else text
-            
+
+            # --- NLP Parsing Pipeline ---
+            parsed = parse_resume(text)
+            meta = ParsedMetadata(
+                skills=parsed.skills,
+                experience_years=parsed.experience_years,
+                education=parsed.education,
+            )
+
+            # --- TF-IDF score against a blank JD (placeholder; real score computed at match time) ---
+            initial_tfidf = 0.0
+
+            # --- MySQL storage (optional, silently skipped if DB unavailable) ---
+            candidate_db.insert_candidate(
+                resume_id=resume_id,
+                filename=filename,
+                skills=parsed.skills,
+                experience_years=parsed.experience_years,
+                education=parsed.education,
+                tfidf_score=initial_tfidf,
+                raw_text=text,
+            )
+
             return UploadResponse(
                 is_bulk=False,
                 count=1,
-                message=f"Resume '{filename}' successfully parsed and indexed in FAISS.",
+                message=f"Resume '{filename}' successfully parsed and indexed.",
                 resume_id=resume_id,
                 filename=filename,
                 snippet=snippet,
-                resume_text=text  # Return full text for client-side caching (stateless mode)
+                resume_text=text,
+                parsed_metadata=meta,
             )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
@@ -320,41 +347,71 @@ async def clear_resumes():
 async def stateless_match(request: StatelessMatchRequest):
     """
     Stateless match endpoint: accepts full resume texts inline in the request.
-    No server-side storage needed. Works perfectly on serverless platforms like Vercel.
+    Computes both semantic (Gemini embedding) and TF-IDF cosine similarity scores.
+    Also runs the NLP parsing pipeline to attach skill/experience metadata.
     """
     import time
     start_time = time.perf_counter()
     try:
         if not request.candidates:
-            return MatchResponse(matches=[], method="Gemini Embeddings (Stateless)", processing_time_ms=0.0)
+            return MatchResponse(matches=[], method="Gemini Embeddings + TF-IDF (Stateless)", processing_time_ms=0.0)
 
-        # Embed the job description
+        # --- Semantic embedding scores ---
         query_emb = embedder.embed_text(request.job_description)
         query_norm = query_emb / (np.linalg.norm(query_emb) + 1e-9)
 
-        # Score each candidate inline
+        # --- TF-IDF scores ---
+        resume_texts = [c.text for c in request.candidates]
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        from sklearn.metrics.pairwise import cosine_similarity as sk_cosine
+        tfidf_scores_map = {}
+        try:
+            vectorizer = TfidfVectorizer(stop_words="english")
+            tfidf_matrix = vectorizer.fit_transform(resume_texts)
+            query_vec = vectorizer.transform([request.job_description])
+            raw_scores = sk_cosine(query_vec, tfidf_matrix).flatten()
+            for i, c in enumerate(request.candidates):
+                tfidf_scores_map[c.resume_id] = float(raw_scores[i])
+        except Exception:
+            # Gracefully skip TF-IDF if vocabulary is empty
+            for c in request.candidates:
+                tfidf_scores_map[c.resume_id] = 0.0
+
+        # --- Score and rank candidates ---
         scored = []
         for candidate in request.candidates:
             c_emb = embedder.embed_text(candidate.text)
             c_norm = c_emb / (np.linalg.norm(c_emb) + 1e-9)
-            score = float(np.dot(query_norm, c_norm))
-            scored.append((candidate, score))
+            sem_score = float(np.dot(query_norm, c_norm))
+            scored.append((candidate, sem_score))
 
         scored.sort(key=lambda x: x[1], reverse=True)
         top = scored[:request.top_k]
 
+        # --- Build result list with NLP metadata ---
         matches = []
         for candidate, score in top:
             snippet = candidate.text[:200] + "..." if len(candidate.text) > 200 else candidate.text
+            parsed = parse_resume(candidate.text)
             matches.append(MatchResult(
                 resume_id=candidate.resume_id,
                 filename=candidate.filename,
                 score=score,
-                snippet=snippet
+                tfidf_score=tfidf_scores_map.get(candidate.resume_id, 0.0),
+                snippet=snippet,
+                parsed_metadata=ParsedMetadata(
+                    skills=parsed.skills,
+                    experience_years=parsed.experience_years,
+                    education=parsed.education,
+                )
             ))
 
         processing_time = (time.perf_counter() - start_time) * 1000.0
-        return MatchResponse(matches=matches, method="Gemini Embeddings (Stateless)", processing_time_ms=processing_time)
+        return MatchResponse(
+            matches=matches,
+            method="Gemini Embeddings + TF-IDF (Stateless)",
+            processing_time_ms=processing_time
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Stateless match failed: {str(e)}")
 
@@ -389,3 +446,32 @@ async def stateless_analyze(request: StatelessAnalyzeRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Stateless analysis failed: {str(e)}")
+
+
+@app.post("/filter-candidates")
+async def filter_candidates(request: CandidateFilterRequest):
+    """
+    Filter candidates stored in MySQL by skill keyword or minimum experience.
+    Returns an empty list gracefully if MySQL is not configured.
+    """
+    if not candidate_db.is_available:
+        return {
+            "db_available": False,
+            "message": "MySQL not configured. Set DATABASE_URL environment variable to enable persistent candidate filtering.",
+            "candidates": []
+        }
+
+    results = []
+    if request.skill:
+        results = candidate_db.query_by_skill(request.skill)
+    elif request.min_experience_years is not None:
+        results = candidate_db.query_by_min_experience(request.min_experience_years)
+    else:
+        results = candidate_db.get_all()
+
+    return {
+        "db_available": True,
+        "total": len(results),
+        "candidates": results
+    }
+
