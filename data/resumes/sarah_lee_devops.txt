@@ -1,0 +1,14 @@
+Sarah Lee - DevOps & Cloud Infrastructure Engineer
+
+Technical Skills:
+- Cloud: AWS (EC2, VPC, EKS, RDS, S3, IAM), GCP
+- Automation/IaC: Terraform, Ansible
+- CI/CD: GitHub Actions, Jenkins, GitLab CI
+- Containerization & Orchestration: Docker, Kubernetes, Helm
+- Monitoring: Prometheus, Grafana, ELK Stack
+
+Experience:
+DevOps Engineer at InfraTech (2022 - Present):
+- Automated multi-region AWS cloud infrastructure deployment using Terraform, reducing setup time by 80%.
+- Maintained production Kubernetes (EKS) clusters, scaling deployments to handle peak traffic spikes.
+- Constructed end-to-end CI/CD pipelines, shortening code-to-production cycles to under 10 minutes.

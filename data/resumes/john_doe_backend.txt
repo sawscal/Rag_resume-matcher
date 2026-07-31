@@ -1,0 +1,13 @@
+John Doe - Senior Backend Engineer
+
+Technical Skills:
+- Languages: Python, Go, SQL
+- Frameworks: FastAPI, Flask, Django
+- Tools & Infrastructure: Docker, Kubernetes, AWS EC2, S3, PostgreSQL, Redis
+- Concepts: REST APIs, Microservices, System Design, CI/CD
+
+Experience:
+Backend Developer at CloudScale (2023 - Present):
+- Built and deployed scalable REST APIs containerized with Docker on AWS EC2, handling 500+ daily candidate queries.
+- Designed database schemas in PostgreSQL, improving query response times by 30%.
+- Built secure user authentication systems and API gateways.

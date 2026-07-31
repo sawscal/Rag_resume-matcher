@@ -1,0 +1,13 @@
+Alice Smith - Machine Learning & NLP Scientist
+
+Technical Skills:
+- Languages: Python, R, C++
+- Libraries: PyTorch, Hugging Face, Transformers, Scikit-learn, Pandas, NumPy
+- Databases: FAISS, Pinecone, MongoDB
+- Concepts: Natural Language Processing (NLP), Retrieval-Augmented Generation (RAG), Sentence-BERT, Vector Embeddings
+
+Experience:
+AI Research Engineer at ML Labs (2022 - Present):
+- Built an end-to-end Retrieval-Augmented Generation (RAG) job-matching system using Sentence-BERT embeddings and FAISS vector database.
+- Increased matching accuracy by 38% over baseline TF-IDF by implementing dense semantic retrievers.
+- Fine-tuned BERT and T5 models for custom document classification and summary generation.

@@ -1,0 +1,13 @@
+David Kim - Technical Product Manager
+
+Technical Skills:
+- Methodologies: Agile, Scrum, Kanban, Product Lifecycle Management
+- Tools: Jira, Confluence, Figma, Mixpanel, Tableau
+- Analytics: SQL, Google Analytics, Excel
+- Core Competencies: Roadmap Strategy, User Research, A/B Testing, Stakeholder Management
+
+Experience:
+Technical Product Manager at FinTech Corp (2020 - Present):
+- Owned the product lifecycle for a mobile banking app, growing active user base from 10k to 100k.
+- Gathered requirements, designed user stories, and collaborated with engineering teams to ship 15+ major features.
+- Analyzed conversion funnels using SQL and Mixpanel to identify user friction points, improving conversion rate by 12%.

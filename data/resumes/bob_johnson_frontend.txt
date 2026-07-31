@@ -1,0 +1,13 @@
+Bob Johnson - Lead Frontend Engineer
+
+Technical Skills:
+- Languages: TypeScript, JavaScript, HTML5, CSS3
+- Frameworks: React, Next.js, Vue.js, Tailwind CSS
+- Tools: Webpack, Vite, Git, Jest
+- Concepts: Responsive Design, SPA, State Management (Redux, Zustand), Web Performance Optimization
+
+Experience:
+Frontend Architect at WebFlow (2021 - Present):
+- Rebuilt the core client dashboard using Next.js and Tailwind CSS, improving load times by 40%.
+- Implemented responsive, pixel-perfect user interfaces, boosting user engagement by 15%.
+- Managed a team of 4 frontend developers and established TypeScript coding guidelines.

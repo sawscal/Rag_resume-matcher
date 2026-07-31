@@ -1,0 +1,1343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG-Based AI Resume Selector</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-darkest: #030712;
+            --bg-darker: #0b0f19;
+            --bg-card: rgba(17, 24, 39, 0.7);
+            --border-glow: rgba(99, 102, 241, 0.15);
+            --border-hover: rgba(99, 102, 241, 0.4);
+            
+            --accent-primary: #6366f1;
+            --accent-primary-hover: #4f46e5;
+            --accent-secondary: #06b6d4;
+            --accent-success: #10b981;
+            --accent-warning: #f59e0b;
+            --accent-danger: #ef4444;
+            
+            --text-main: #f3f4f6;
+            --text-secondary: #e5e7eb;
+            --text-muted: #9ca3af;
+            --glass-blur: blur(24px);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-darkest);
+            color: var(--text-main);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+            padding: 3rem 1.5rem;
+        }
+
+        /* Floating Background Orbs */
+        .bg-glow-orb-1, .bg-glow-orb-2 {
+            position: fixed;
+            width: 500px;
+            height: 500px;
+            border-radius: 50%;
+            filter: blur(120px);
+            z-index: -1;
+            opacity: 0.15;
+            pointer-events: none;
+        }
+
+        .bg-glow-orb-1 {
+            background: radial-gradient(circle, var(--accent-primary) 0%, transparent 80%);
+            top: -100px;
+            left: -100px;
+            animation: floatOrb 15s ease-in-out infinite alternate;
+        }
+
+        .bg-glow-orb-2 {
+            background: radial-gradient(circle, var(--accent-secondary) 0%, transparent 80%);
+            bottom: -150px;
+            right: -100px;
+            animation: floatOrb 20s ease-in-out infinite alternate-reverse;
+        }
+
+        @keyframes floatOrb {
+            0% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(60px, 40px) scale(1.1); }
+            100% { transform: translate(-30px, 80px) scale(0.9); }
+        }
+
+        .container {
+            max-width: 1240px;
+            margin: 0 auto;
+        }
+
+        /* Header design */
+        header {
+            text-align: center;
+            margin-bottom: 4rem;
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        header h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 3.2rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            line-height: 1.15;
+            background: linear-gradient(135deg, #ffffff 0%, #a5b4fc 40%, var(--accent-primary) 70%, var(--accent-secondary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.75rem;
+        }
+
+        header p {
+            color: var(--text-muted);
+            font-size: 1.2rem;
+            font-weight: 300;
+            max-width: 600px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+
+        /* Grid System */
+        .grid {
+            display: grid;
+            grid-template-columns: 1.1fr 1.3fr;
+            gap: 2.5rem;
+            align-items: start;
+        }
+
+        @media (max-width: 1000px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Glassmorphism Card Panels */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-glow);
+            border-radius: 24px;
+            padding: 2.5rem;
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+            position: relative;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 24px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 100%);
+            pointer-events: none;
+        }
+
+        .card:hover {
+            border-color: var(--border-hover);
+            box-shadow: 0 20px 48px rgba(99, 102, 241, 0.08);
+            transform: translateY(-2px);
+        }
+
+        h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            position: relative;
+        }
+
+        h2 svg {
+            color: var(--accent-primary);
+        }
+
+        /* Elegant Drag & Drop Upload Zone */
+        .upload-zone {
+            border: 2px dashed rgba(99, 102, 241, 0.25);
+            border-radius: 18px;
+            padding: 3rem 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            background: rgba(255, 255, 255, 0.01);
+            position: relative;
+        }
+
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: var(--accent-primary);
+            background: rgba(99, 102, 241, 0.06);
+            transform: scale(1.01);
+        }
+
+        .upload-icon-container {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: rgba(99, 102, 241, 0.08);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1.25rem auto;
+            border: 1px solid rgba(99, 102, 241, 0.15);
+            transition: all 0.3s;
+        }
+
+        .upload-zone:hover .upload-icon-container {
+            background: rgba(99, 102, 241, 0.2);
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 16px rgba(99, 102, 241, 0.25);
+        }
+
+        .upload-zone svg {
+            width: 28px;
+            height: 28px;
+            fill: none;
+            stroke: var(--accent-primary);
+            stroke-width: 2.2;
+        }
+
+        .upload-zone input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+            z-index: 5;
+        }
+
+        .file-card {
+            margin-top: 1.25rem;
+            background: rgba(16, 185, 129, 0.08);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            padding: 1rem;
+            border-radius: 12px;
+            display: none;
+            align-items: center;
+            gap: 0.75rem;
+            animation: fadeInUp 0.3s ease;
+        }
+
+        .file-card-details {
+            flex-grow: 1;
+            text-align: left;
+        }
+
+        .file-card-name {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--accent-success);
+            word-break: break-all;
+        }
+
+        .file-card-size {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.15rem;
+        }
+
+        .upload-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 1.5rem;
+        }
+
+        /* SaaS Buttons */
+        .saas-btn {
+            padding: 0.85rem 1.75rem;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .saas-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .saas-btn-primary {
+            background: linear-gradient(135deg, var(--accent-primary) 0%, #4f46e5 100%);
+            color: white;
+            box-shadow: 0 4px 18px rgba(99, 102, 241, 0.35);
+        }
+
+        .saas-btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(99, 102, 241, 0.45);
+        }
+
+        .saas-btn-secondary {
+            background: rgba(255, 255, 255, 0.03);
+            border-color: var(--border-glow);
+            color: var(--text-main);
+        }
+
+        .saas-btn-secondary:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.07);
+            border-color: var(--border-hover);
+        }
+
+        /* Stored Resumes List */
+        .resumes-panel {
+            margin-top: 2.5rem;
+        }
+
+        .resumes-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .panel-count {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--border-glow);
+            padding: 0.2rem 0.6rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-muted);
+        }
+
+        .resumes-list-box {
+            max-height: 220px;
+            overflow-y: auto;
+            padding-right: 0.25rem;
+        }
+
+        .resume-ui-item {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 0.75rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .resume-ui-item:hover {
+            background: rgba(255, 255, 255, 0.04);
+            border-color: rgba(99, 102, 241, 0.25);
+        }
+
+        .resume-ui-icon {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            max-width: 75%;
+        }
+
+        .resume-ui-name {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: white;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .resume-ui-id {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .clear-db-btn {
+            background: transparent;
+            border: none;
+            color: var(--accent-danger);
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .clear-db-btn:hover {
+            opacity: 0.8;
+            text-decoration: underline;
+        }
+
+        /* Match Form */
+        textarea {
+            width: 100%;
+            height: 200px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-glow);
+            border-radius: 14px;
+            padding: 1.25rem;
+            color: white;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            resize: none;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        textarea:focus {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 16px rgba(99, 102, 241, 0.15);
+            background: rgba(0, 0, 0, 0.4);
+        }
+
+        .settings-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 1.5rem;
+            margin-bottom: 2rem;
+            background: rgba(0,0,0,0.15);
+            padding: 1rem 1.25rem;
+            border-radius: 12px;
+            border: 1px solid var(--border-glow);
+        }
+
+        .settings-label {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .number-selector {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .number-selector input {
+            width: 60px;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--border-glow);
+            border-radius: 8px;
+            padding: 0.5rem;
+            color: white;
+            font-size: 0.95rem;
+            text-align: center;
+            outline: none;
+        }
+
+        /* Results Panel */
+        .results-section {
+            margin-top: 4rem;
+            animation: fadeInUp 0.7s ease;
+        }
+
+        .results-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding: 0 0.5rem;
+        }
+
+        .results-meta-item {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .results-meta-item strong {
+            color: white;
+        }
+
+        .match-cards-container {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+        }
+
+        .match-card {
+            background: rgba(17, 24, 39, 0.5);
+            border: 1px solid var(--border-glow);
+            border-radius: 20px;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            backdrop-filter: var(--glass-blur);
+        }
+
+        .match-card:hover {
+            border-color: var(--border-hover);
+            transform: scale(1.005);
+            background: rgba(17, 24, 39, 0.65);
+        }
+
+        .match-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .match-card-title {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .match-card-filename {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: white;
+        }
+
+        .match-card-id {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.04);
+            padding: 0.15rem 0.5rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-glow);
+        }
+
+        /* Score Track */
+        .score-track-box {
+            display: flex;
+            align-items: center;
+            gap: 1.25rem;
+        }
+
+        .score-percentage {
+            font-weight: 800;
+            font-size: 1.1rem;
+            min-width: 60px;
+            text-align: right;
+        }
+
+        .progress-bar-wrapper {
+            flex-grow: 1;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            width: 0%;
+            transition: width 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .match-snippet-box {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            background: rgba(0, 0, 0, 0.25);
+            padding: 1.25rem;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            font-style: italic;
+            position: relative;
+        }
+
+        .match-snippet-box::before {
+            content: '“';
+            position: absolute;
+            font-size: 3rem;
+            color: rgba(99, 102, 241, 0.1);
+            top: -10px;
+            left: 5px;
+            font-family: serif;
+        }
+
+        .match-card-actions {
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .evaluate-fit-btn {
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid var(--accent-primary);
+            color: #c7d2fe;
+            padding: 0.65rem 1.25rem;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .evaluate-fit-btn:hover {
+            background: var(--accent-primary);
+            color: white;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+        }
+
+        /* Modal bottom sheet design */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(3, 7, 18, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-container {
+            background: var(--bg-darker);
+            border: 1px solid var(--border-hover);
+            border-radius: 28px;
+            width: 90%;
+            max-width: 700px;
+            position: relative;
+            transform: translateY(30px);
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+            overflow: hidden;
+        }
+
+        .modal-overlay.active .modal-container {
+            transform: translateY(0);
+        }
+
+        .modal-header {
+            padding: 1.75rem 2.25rem;
+            border-bottom: 1px solid var(--border-glow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title-text {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: white;
+        }
+
+        .modal-close-icon {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border-glow);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 1.25rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .modal-close-icon:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: white;
+            transform: rotate(90deg);
+        }
+
+        .modal-content-body {
+            padding: 2.25rem;
+            max-height: 480px;
+            overflow-y: auto;
+        }
+
+        .rag-report-box {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-glow);
+            border-radius: 16px;
+            padding: 1.75rem;
+            line-height: 1.7;
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+        }
+
+        .rag-section-node {
+            margin-bottom: 1.5rem;
+        }
+
+        .rag-section-node:last-child {
+            margin-bottom: 0;
+        }
+
+        .rag-node-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.05rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .rag-node-body {
+            color: var(--text-muted);
+            padding-left: 1.5rem;
+        }
+
+        /* Loader block */
+        .saas-loader {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem 0;
+            gap: 1.25rem;
+        }
+
+        .pulse-ring {
+            width: 48px;
+            height: 48px;
+            border: 3px solid rgba(99, 102, 241, 0.1);
+            border-radius: 50%;
+            border-top-color: var(--accent-primary);
+            animation: spin 0.8s linear infinite;
+            position: relative;
+        }
+
+        .pulse-ring::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border: 3px solid transparent;
+            border-radius: 50%;
+            border-bottom-color: var(--accent-secondary);
+            animation: spin 1.2s linear infinite reverse;
+            top: -3px;
+            left: -3px;
+        }
+
+        /* Toast Notifications system */
+        #toast-container {
+            position: fixed;
+            top: 2rem;
+            right: 2rem;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            pointer-events: none;
+        }
+
+        .toast {
+            background: rgba(17, 24, 39, 0.9);
+            border-left: 4px solid var(--accent-primary);
+            border-top: 1px solid var(--border-glow);
+            border-bottom: 1px solid var(--border-glow);
+            border-right: 1px solid var(--border-glow);
+            padding: 1rem 1.5rem;
+            border-radius: 12px;
+            color: white;
+            font-size: 0.9rem;
+            font-weight: 500;
+            min-width: 300px;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(8px);
+            pointer-events: auto;
+            transform: translateX(120%);
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s;
+            opacity: 0;
+        }
+
+        .toast.show {
+            transform: translateX(0);
+            opacity: 1;
+        }
+
+        .toast-success { border-left-color: var(--accent-success); }
+        .toast-warning { border-left-color: var(--accent-warning); }
+        .toast-danger { border-left-color: var(--accent-danger); }
+
+        /* Animations */
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Floating Blur Orbs -->
+    <div class="bg-glow-orb-1"></div>
+    <div class="bg-glow-orb-2"></div>
+
+    <!-- Notification Container -->
+    <div id="toast-container"></div>
+
+    <div class="container">
+        <header>
+            <h1>RAG Resume & Job Matcher</h1>
+            <p>Deploy dense vector semantic search indices under 150ms and get automated fit summaries powered by generative language models.</p>
+        </header>
+
+        <div class="grid">
+            <!-- Left Panel: Indexing Database -->
+            <div class="card">
+                <h2>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                    Candidates Database
+                </h2>
+                
+                <div class="upload-zone" id="uploadZone">
+                    <div class="upload-icon-container">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
+                    </div>
+                    <p style="font-weight: 700; font-size: 1rem; color: white;">Drag & Drop Resume / Sheet</p>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.35rem;">Supports PDF, DOCX, TXT, Excel, or CSV</p>
+                    <input type="file" id="fileInput" accept=".pdf,.txt,.docx,.xlsx,.xls,.csv">
+                </div>
+
+                <div class="file-card" id="fileCard">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <div class="file-card-details">
+                        <div class="file-card-name" id="fileName">resume_john.pdf</div>
+                        <div class="file-card-size" id="fileSize">142 KB</div>
+                    </div>
+                </div>
+
+                <div class="upload-actions">
+                    <button class="saas-btn saas-btn-primary" id="uploadBtn">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                        Upload and Index
+                    </button>
+                </div>
+
+                <!-- Resumes List UI -->
+                <div class="resumes-panel">
+                    <div class="resumes-panel-header">
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span style="font-weight: 700; font-size: 0.95rem; color: white;">Indexed Candidates</span>
+                            <span class="panel-count" id="resumeCount">0</span>
+                        </div>
+                        <button class="clear-db-btn" id="clearBtn">Clear Database</button>
+                    </div>
+                    <div class="resumes-list-box" id="resumeList">
+                        <!-- Filled dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Semantics Search Input -->
+            <div class="card">
+                <h2>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    Search Candidates by Job Description
+                </h2>
+                
+                <div class="form-group">
+                    <label style="font-weight: 600; font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.75rem;">What skills or job requirements are you hiring for?</label>
+                    <textarea id="jdText" placeholder="Type key skills or paste a job description here (e.g. 'Looking for a Frontend Developer with React, TypeScript, and UI/UX design experience...')."></textarea>
+                </div>
+
+                <div class="settings-row">
+                    <span class="settings-label">Number of top candidates to show</span>
+                    <div class="number-selector">
+                        <input type="number" id="topK" min="1" max="10" value="3">
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 1rem;">
+                    <button class="saas-btn saas-btn-primary" style="flex: 1.2;" id="matchBtn">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        AI Smart Search
+                    </button>
+                    <button class="saas-btn saas-btn-secondary" style="flex: 0.8;" id="tfidfBtn">
+                        Traditional Keyword Match
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Matching results output container -->
+        <div class="results-section" id="resultsSection" style="display: none;">
+            <div class="results-meta">
+                <div class="results-meta-item">Search Method: <strong id="resultMethod">Sentence-BERT + FAISS</strong></div>
+                <div class="results-meta-item">Retrieval Speed: <strong id="resultSpeed" style="color: var(--accent-success);">42.3 ms</strong></div>
+            </div>
+            <div class="match-cards-container" id="matchGrid">
+                <!-- Matches card grids filled dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- UI Overlay modal for RAG Fit summary report -->
+    <div class="modal-overlay" id="ragModal">
+        <div class="modal-container">
+            <div class="modal-header">
+                <div class="modal-title-text" id="ragModalTitle">AI Candidate Fit Report</div>
+                <button class="modal-close-icon" id="closeModal">&times;</button>
+            </div>
+            <div class="modal-content-body" id="ragModalBody">
+                <!-- Filled dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = ""; 
+
+        // DOM elements cache
+        const fileInput = document.getElementById('fileInput');
+        const uploadZone = document.getElementById('uploadZone');
+        const fileCard = document.getElementById('fileCard');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const resumeList = document.getElementById('resumeList');
+        const resumeCount = document.getElementById('resumeCount');
+        const clearBtn = document.getElementById('clearBtn');
+        
+        const jdText = document.getElementById('jdText');
+        const topK = document.getElementById('topK');
+        const matchBtn = document.getElementById('matchBtn');
+        const tfidfBtn = document.getElementById('tfidfBtn');
+        
+        const resultsSection = document.getElementById('resultsSection');
+        const resultMethod = document.getElementById('resultMethod');
+        const resultSpeed = document.getElementById('resultSpeed');
+        const matchGrid = document.getElementById('matchGrid');
+
+        const ragModal = document.getElementById('ragModal');
+        const closeModal = document.getElementById('closeModal');
+        const ragModalBody = document.getElementById('ragModalBody');
+
+        let selectedFile = null;
+
+        // Custom Toast function
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            
+            // Icon choosing
+            let icon = '';
+            if (type === 'success') {
+                icon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+            } else if (type === 'warning') {
+                icon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+            } else {
+                icon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+            }
+
+            toast.innerHTML = `${icon}<span>${message}</span>`;
+            container.appendChild(toast);
+            
+            // Trigger animation
+            setTimeout(() => toast.classList.add('show'), 50);
+            
+            // Self remove
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 400);
+            }, 3500);
+        }
+
+        // Parse file size helpers
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        // Fetch stored candidates
+        async function fetchResumes() {
+            try {
+                const res = await fetch(`${API_URL}/resumes`);
+                const data = await res.json();
+                resumeCount.innerText = data.length;
+                resumeList.innerHTML = '';
+                
+                if (data.length === 0) {
+                    resumeList.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; padding: 1.5rem; text-align: center;">No candidates indexed. Upload a file above.</div>';
+                    return;
+                }
+
+                data.forEach(resume => {
+                    const item = document.createElement('div');
+                    item.className = 'resume-ui-item';
+                    item.innerHTML = `
+                        <div class="resume-ui-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            <div style="overflow: hidden;">
+                                <div class="resume-ui-name" title="${resume.filename}">${resume.filename}</div>
+                                <div class="resume-ui-id">ID: ${resume.resume_id}</div>
+                            </div>
+                        </div>
+                        <span style="color: var(--accent-success); font-size: 0.75rem; font-weight: 700; text-transform: uppercase;">Indexed</span>
+                    `;
+                    resumeList.appendChild(item);
+                });
+            } catch (err) {
+                console.error("Failed fetching resumes:", err);
+            }
+        }
+
+        // Clear indexed db
+        clearBtn.addEventListener('click', async () => {
+            if (!confirm("Are you sure you want to delete all indexed resumes from vector database?")) return;
+            try {
+                const res = await fetch(`${API_URL}/resumes`, { method: 'DELETE' });
+                await res.json();
+                showToast("Embeddings database cleared successfully", "warning");
+                fetchResumes();
+            } catch (err) {
+                showToast("Failed clearing database", "danger");
+            }
+        });
+
+        // File selection handling
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                setFile(e.target.files[0]);
+            }
+        });
+
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('dragover');
+        });
+
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                setFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        function setFile(file) {
+            selectedFile = file;
+            fileName.innerText = file.name;
+            fileSize.innerText = formatBytes(file.size);
+            fileCard.style.display = 'flex';
+            fileCard.style.borderColor = 'rgba(99, 102, 241, 0.2)';
+            
+            // Automatically trigger the upload and index process
+            uploadFile();
+        }
+
+        // Upload and Index logic
+        async function uploadFile() {
+            if (!selectedFile) return;
+
+            const formData = new FormData();
+            formData.append("file", selectedFile);
+
+            uploadBtn.innerHTML = '<span class="pulse-ring" style="width: 14px; height: 14px; border-width: 2px;"></span> Indexing...';
+            uploadBtn.disabled = true;
+            fileCard.style.borderColor = 'var(--accent-primary)';
+
+            try {
+                const res = await fetch(`${API_URL}/upload-resume`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || "Parse failure");
+                }
+
+                const result = await res.json();
+                selectedFile = null;
+                fileCard.style.display = 'none';
+                fileInput.value = '';
+                await fetchResumes();
+                
+                if (result.is_bulk) {
+                    showToast(`Bulk upload success! Indexed ${result.count} candidates from sheet.`, "success");
+                } else {
+                    showToast(`Candidate resume processed and indexed in FAISS!`, "success");
+                }
+            } catch (err) {
+                showToast(`Upload failed: ${err.message}`, "danger");
+                fileCard.style.borderColor = 'rgba(239, 68, 68, 0.2)';
+            } finally {
+                uploadBtn.innerHTML = `
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                    Upload and Index
+                `;
+                uploadBtn.disabled = false;
+            }
+        }
+
+        // Manual upload fallback button
+        uploadBtn.addEventListener('click', () => {
+            if (!selectedFile) {
+                showToast("Please drag & drop or select a resume file first.", "warning");
+                return;
+            }
+            uploadFile();
+        });
+
+        // Similarity match event
+        async function runMatch(endpoint, methodTitle) {
+            const queryText = jdText.value.trim();
+            if (!queryText) {
+                showToast("Please enter or paste job description requirements first.", "warning");
+                return;
+            }
+
+            const k = parseInt(topK.value) || 3;
+            
+            resultsSection.style.display = 'block';
+            matchGrid.innerHTML = `
+                <div class="saas-loader">
+                    <div class="pulse-ring"></div>
+                    <p style="color: var(--text-muted); font-size: 0.9rem;">Comparing Sentence-BERT embeddings in FAISS index...</p>
+                </div>
+            `;
+
+            try {
+                const res = await fetch(`${API_URL}/${endpoint}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        job_description: queryText,
+                        top_k: k
+                    })
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || "Search query failed");
+                }
+
+                const data = await res.json();
+                resultMethod.innerText = data.method;
+                resultSpeed.innerText = `${data.processing_time_ms.toFixed(2)} ms`;
+                
+                matchGrid.innerHTML = '';
+                if (data.matches.length === 0) {
+                    matchGrid.innerHTML = '<div style="color: var(--text-muted); padding: 3rem 0; text-align: center; font-size: 0.95rem;">No matching candidate found. Index some resumes first.</div>';
+                    return;
+                }
+
+                data.matches.forEach((match, index) => {
+                    const percentage = Math.max(0, Math.min(100, Math.round(match.score * 100)));
+                    
+                    // Choose color coding for visual metric
+                    let scoreColor = 'var(--accent-primary)';
+                    if (percentage >= 70) {
+                        scoreColor = 'var(--accent-success)';
+                    } else if (percentage >= 50) {
+                        scoreColor = 'var(--accent-warning)';
+                    }
+
+                    const card = document.createElement('div');
+                    card.className = 'match-card';
+                    card.style.animation = `fadeInUp 0.4s ease forwards ${index * 0.1}s`;
+                    card.style.opacity = 0; // Trigger by animation delay
+                    
+                    card.innerHTML = `
+                        <div class="match-card-header">
+                            <div class="match-card-title">
+                                <span class="match-card-filename">${match.filename}</span>
+                                <span class="match-card-id">ID: ${match.resume_id}</span>
+                            </div>
+                            <div class="score-percentage" style="color: ${scoreColor}">${percentage}% Fit</div>
+                        </div>
+                        <div class="score-track-box">
+                            <div class="progress-bar-wrapper">
+                                <div class="progress-bar-fill" style="width: ${percentage}%; background: ${scoreColor}"></div>
+                            </div>
+                        </div>
+                        <div class="match-snippet-box">${match.snippet}</div>
+                        <div class="match-card-actions">
+                            <button class="evaluate-fit-btn" onclick="triggerRag('${match.resume_id}', ${percentage}, '${escapeHtml(match.filename)}')">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                                RAG AI Analysis
+                            </button>
+                        </div>
+                    `;
+                    matchGrid.appendChild(card);
+                });
+            } catch (err) {
+                matchGrid.innerHTML = `<div style="color: var(--accent-danger); padding: 3rem 0; text-align: center;">Error performing match: ${err.message}</div>`;
+            }
+        }
+
+        matchBtn.addEventListener('click', () => runMatch('match', 'Sentence-BERT + FAISS'));
+        tfidfBtn.addEventListener('click', () => runMatch('match-tfidf', 'TF-IDF Baseline'));
+
+        // HTML escaping utility for safe string inline execution
+        function escapeHtml(string) {
+            return string
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // RAG Fit report query
+        window.triggerRag = async function(resumeId, matchScore, filename) {
+            const queryText = jdText.value.trim();
+            document.getElementById('ragModalTitle').innerHTML = `AI Evaluation: <span style="color: var(--accent-primary)">${filename}</span>`;
+            
+            ragModalBody.innerHTML = `
+                <div class="saas-loader" style="padding: 4rem 0;">
+                    <div class="pulse-ring"></div>
+                    <p style="color: var(--text-muted); font-size: 0.95rem; font-weight: 500;">Retrieving Candidate context & generating evaluation...</p>
+                    <p style="color: var(--text-muted); font-size: 0.8rem; font-style: italic;">Running local Flan-T5 model on CPU (takes ~2 seconds)...</p>
+                </div>
+            `;
+            ragModal.classList.add('active');
+
+            try {
+                const res = await fetch(`${API_URL}/rag-analyze`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        resume_id: resumeId,
+                        job_description: queryText
+                    })
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || "RAG server error");
+                }
+
+                const data = await res.json();
+                
+                // Parse and beautify the text structure from Flan-T5 model
+                const rawAnalysis = data.analysis;
+                let parsedHtml = '';
+
+                // Attempt structural rendering of evaluation nodes
+                if (rawAnalysis.toLowerCase().includes("error")) {
+                    parsedHtml = `<div style="color: var(--accent-danger); font-weight: 500;">${rawAnalysis}</div>`;
+                } else {
+                    // Prettify T5 segments by parsing 1), 2), 3) lists or similar
+                    const matchesMatch = rawAnalysis.match(/1\)(.*?)(?=2\)|$)/i);
+                    const gapsMatch = rawAnalysis.match(/2\)(.*?)(?=3\)|$)/i);
+                    const recommendationMatch = rawAnalysis.match(/3\)(.*?)$/i);
+
+                    if (matchesMatch || gapsMatch || recommendationMatch) {
+                        if (matchesMatch) {
+                            parsedHtml += `
+                                <div class="rag-section-node">
+                                    <div class="rag-node-title" style="color: var(--accent-success);">
+                                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                                        Matching Skills & Strength
+                                    </div>
+                                    <div class="rag-node-body">${matchesMatch[1].trim()}</div>
+                                </div>
+                            `;
+                        }
+                        if (gapsMatch) {
+                            parsedHtml += `
+                                <div class="rag-section-node">
+                                    <div class="rag-node-title" style="color: var(--accent-warning);">
+                                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                        Identify Gap Areas
+                                    </div>
+                                    <div class="rag-node-body">${gapsMatch[1].trim()}</div>
+                                </div>
+                            `;
+                        }
+                        if (recommendationMatch) {
+                            parsedHtml += `
+                                <div class="rag-section-node" style="border-top: 1px solid var(--border-glow); padding-top: 1.5rem; margin-top: 1.5rem;">
+                                    <div class="rag-node-title">
+                                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"/></svg>
+                                        Final Fit Verdict
+                                    </div>
+                                    <div class="rag-node-body" style="font-weight: 700; color: white;">${recommendationMatch[1].trim()}</div>
+                                </div>
+                            `;
+                        }
+                    } else {
+                        // Fallback simple view
+                        parsedHtml = `<div class="rag-section-node"><div class="rag-node-body">${rawAnalysis}</div></div>`;
+                    }
+                }
+
+                ragModalBody.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1.5rem;">
+                        <span style="font-size: 0.9rem; color: var(--text-muted);">Generative LLM Score Analysis:</span>
+                        <span class="panel-count" style="color: var(--accent-success); font-weight:700;">${matchScore}% Match Index</span>
+                    </div>
+                    <div class="rag-report-box">${parsedHtml}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); text-align:right; margin-top:1rem;">Generative latency: ${data.processing_time_ms.toFixed(0)} ms</div>
+                `;
+            } catch (err) {
+                ragModalBody.innerHTML = `<div style="color: var(--accent-danger); font-weight:600;">Failed: ${err.message}</div>`;
+            }
+        }
+
+        closeModal.addEventListener('click', () => {
+            ragModal.classList.remove('active');
+        });
+
+        window.addEventListener('click', (e) => {
+            if (e.target === ragModal) {
+                ragModal.classList.remove('active');
+            }
+        });
+
+        // Initialize fetch
+        fetchResumes();
+    </script>
+</body>
+</html>
