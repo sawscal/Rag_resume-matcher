@@ -1,0 +1,10 @@
+{
+  "name": "rag-resume-matcher-backend",
+  "version": "1.0.0",
+  "description": "RAG-based AI Resume Selector & Job Matcher",
+  "scripts": {
+    "build": "echo No frontend javascript compilation required for FastAPI backend."
+  },
+  "author": "",
+  "license": "ISC"
+}
