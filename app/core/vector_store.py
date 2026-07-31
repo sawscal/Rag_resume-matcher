@@ -11,9 +11,14 @@ class ResumeVectorStore:
         Normalizes embeddings prior to insertion and search.
         """
         self.embedding_dim = embedding_dim
-        self.persist_dir = persist_dir
-        self.index_file = os.path.join(persist_dir, "faiss.index")
-        self.meta_file = os.path.join(persist_dir, "metadata.pkl")
+        # Vercel filesystem is read-only except for /tmp
+        if os.environ.get("VERCEL"):
+            self.persist_dir = "/tmp/vector_store"
+        else:
+            self.persist_dir = persist_dir
+            
+        self.index_file = os.path.join(self.persist_dir, "faiss.index")
+        self.meta_file = os.path.join(self.persist_dir, "metadata.pkl")
 
         # Create persistence directory if it doesn't exist
         os.makedirs(self.persist_dir, exist_ok=True)
