@@ -2,6 +2,7 @@ fastapi
 uvicorn
 python-multipart
 sentence-transformers
+--extra-index-url https://download.pytorch.org/whl/cpu
 torch
 faiss-cpu
 pypdf
