@@ -1,21 +1,22 @@
 import numpy as np
-from sentence_transformers import SentenceTransformer
+import os
 from typing import List, Union
+from google import genai
 
 class ResumeEmbedder:
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
+    def __init__(self, model_name: str = "text-embedding-004"):
         """
-        Initializes the sentence embedder with a SentenceTransformer model.
+        Initializes the sentence embedder with Gemini API.
         """
         self.model_name = model_name
-        # The model will be loaded on demand (lazy loading) to make start-up fast
-        self._model = None
+        self._client = None
 
     @property
-    def model(self):
-        if self._model is None:
-            self._model = SentenceTransformer(self.model_name)
-        return self._model
+    def client(self):
+        if self._client is None:
+            # Requires GEMINI_API_KEY environment variable to be set
+            self._client = genai.Client()
+        return self._client
 
     def embed_text(self, text: Union[str, List[str]]) -> np.ndarray:
         """
@@ -24,19 +25,26 @@ class ResumeEmbedder:
         """
         if isinstance(text, str):
             # Encode a single string
-            embeddings = self.model.encode([text], convert_to_numpy=True)
-            return embeddings[0]
+            response = self.client.models.embed_content(
+                model=self.model_name,
+                contents=text
+            )
+            return np.array(response.embeddings[0].values, dtype=np.float32)
         else:
             # Encode a list of strings
-            return self.model.encode(text, convert_to_numpy=True)
+            response = self.client.models.embed_content(
+                model=self.model_name,
+                contents=text
+            )
+            embeddings = [emb.values for emb in response.embeddings]
+            return np.array(embeddings, dtype=np.float32)
 
     @property
     def embedding_dim(self) -> int:
         """
         Returns the dimensionality of the generated embeddings.
         """
-        # For 'all-MiniLM-L6-v2', this is 384.
-        return self.model.get_sentence_embedding_dimension()
+        return 768
 
 # Instantiate a global embedder for use across the application
 embedder = ResumeEmbedder()

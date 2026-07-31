@@ -5,7 +5,7 @@ import numpy as np
 from typing import Dict, List, Tuple, Any
 
 class ResumeVectorStore:
-    def __init__(self, embedding_dim: int = 384, persist_dir: str = "data/vector_store"):
+    def __init__(self, embedding_dim: int = 768, persist_dir: str = "data/vector_store"):
         """
         Initializes FAISS IndexFlatIP (Inner Product) for cosine similarity.
         Normalizes embeddings prior to insertion and search.
