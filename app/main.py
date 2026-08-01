@@ -347,14 +347,15 @@ async def clear_resumes():
 async def stateless_match(request: StatelessMatchRequest):
     """
     Stateless match endpoint: accepts full resume texts inline in the request.
-    Computes both semantic (Gemini embedding) and TF-IDF cosine similarity scores.
+    Computes both semantic (TF-IDF hashing) and TF-IDF cosine similarity scores.
+    No external API required — fully local using scikit-learn.
     Also runs the NLP parsing pipeline to attach skill/experience metadata.
     """
     import time
     start_time = time.perf_counter()
     try:
         if not request.candidates:
-            return MatchResponse(matches=[], method="Gemini Embeddings + TF-IDF (Stateless)", processing_time_ms=0.0)
+            return MatchResponse(matches=[], method="TF-IDF + NLP (Local)", processing_time_ms=0.0)
 
         # --- Semantic embedding scores ---
         query_emb = embedder.embed_text(request.job_description)
@@ -409,7 +410,7 @@ async def stateless_match(request: StatelessMatchRequest):
         processing_time = (time.perf_counter() - start_time) * 1000.0
         return MatchResponse(
             matches=matches,
-            method="Gemini Embeddings + TF-IDF (Stateless)",
+            method="TF-IDF + NLP (Local)",
             processing_time_ms=processing_time
         )
     except Exception as e:
@@ -432,7 +433,7 @@ async def stateless_analyze(request: StatelessAnalyzeRequest):
         q_norm = query_emb / (np.linalg.norm(query_emb) + 1e-9)
         score = float(np.dot(r_norm, q_norm))
 
-        # Generate analysis via Gemini
+        # Generate fit analysis via local NLP engine
         analysis = rag_generator.generate_match_analysis(
             resume_text=request.resume_text,
             job_description=request.job_description

@@ -1419,8 +1419,8 @@
             });
         }
 
-        matchBtn.addEventListener('click', () => runMatch('stateless-match', 'Gemini Embeddings (Stateless)'));
-        tfidfBtn.addEventListener('click', () => runMatch('stateless-match', 'Gemini Embeddings (Stateless)'));
+        matchBtn.addEventListener('click', () => runMatch('stateless-match', 'TF-IDF + NLP (Local)'));
+        tfidfBtn.addEventListener('click', () => runMatch('stateless-match', 'TF-IDF + NLP (Local)'));
 
         // HTML escaping utility for safe string inline execution
         function escapeHtml(string) {
@@ -1516,7 +1516,7 @@
                             `;
                         }
                     } else {
-                        // Gemini gives rich markdown — render it nicely as plain text paragraphs
+                        // Local NLP gives structured text — render as plain text paragraphs
                         const lines = rawAnalysis.split('\n').filter(l => l.trim());
                         parsedHtml = lines.map(line => `<div class="rag-section-node"><div class="rag-node-body">${line}</div></div>`).join('');
                     }
